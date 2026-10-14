@@ -1,28 +1,33 @@
-import gradio as gr
+import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
 from scipy.ndimage import rotate
 import cv2
+import os
+import gdown
+import pandas as pd
 
-# ============ تحميل النموذجين ============
-print("⏳ جاري تحميل النموذج v2 (الأدق على Kaggle)...")
-model_v2 = tf.keras.models.load_model("kidney_model_clean.keras")
-print("✅ تم تحميل v2")
+# ============ تحميل النموذج من Google Drive ============
+MODEL_PATH = "kidney_model_clean.keras"
+FILE_ID = "1_glpz6OnqWZt5QkRGLbhzZVmJNU9Yhv4"
 
-print("⏳ جاري تحميل النموذج v3 (الأكثر مرونة)...")
-model_v3 = tf.keras.models.load_model("kidney_model_v3_clean.keras")
-print("✅ تم تحميل v3")
+@st.cache_resource
+def load_model():
+    if not os.path.exists(MODEL_PATH):
+        with st.spinner("⏳ جاري تحميل النموذج لأول مرة..."):
+            try:
+                gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False, fuzzy=True)
+            except Exception as e:
+                st.error(f"❌ خطأ في تحميل النموذج: {e}")
+                st.stop()
+    return tf.keras.models.load_model(MODEL_PATH, compile=False)
 
+model = load_model()
 class_names = ["Cyst", "Normal", "Stone", "Tumor"]
 IMG_SIZE = 224
-WEIGHT_V2 = 0.6
-WEIGHT_V3 = 0.4
 
-print("🚀 كل النماذج جاهزة!")
-
-
-# ============ معالجة مسبقة بمعيار CT ============
+# ============ معالجة الصور (CLAHE) ============
 def preprocess_ct_image(img):
     img_array = np.array(img.convert('RGB'))
     gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
@@ -33,51 +38,58 @@ def preprocess_ct_image(img):
     if p98 - p2 > 0:
         equalized = np.clip((equalized - p2) / (p98 - p2) * 255, 0, 255)
     equalized = cv2.resize(equalized, (IMG_SIZE, IMG_SIZE))
-    result = np.stack([equalized] * 3, axis=-1)
-    return result.astype('float32')
+    return np.stack([equalized] * 3, axis=-1).astype('float32')
 
-
-# ============ TTA ============
-def predict_single_model(model, arr):
-    predictions = []
-    predictions.append(model.predict(np.expand_dims(arr, 0), verbose=0)[0])
-    predictions.append(model.predict(np.expand_dims(np.fliplr(arr).copy(), 0), verbose=0)[0])
-    predictions.append(model.predict(np.expand_dims(np.flipud(arr).copy(), 0), verbose=0)[0])
-    for angle in [-12, -6, 6, 12]:
-        rot = rotate(arr, angle, reshape=False, mode='nearest', axes=(0, 1))
-        predictions.append(model.predict(np.expand_dims(rot, 0), verbose=0)[0])
-    predictions.append(model.predict(np.expand_dims(np.clip(arr * 1.15, 0, 255), 0), verbose=0)[0])
-    predictions.append(model.predict(np.expand_dims(np.clip(arr * 0.85, 0, 255), 0), verbose=0)[0])
-    mean_val = arr.mean()
-    predictions.append(model.predict(np.expand_dims(np.clip((arr - mean_val) * 1.2 + mean_val, 0, 255), 0), verbose=0)[0])
-    predictions.append(model.predict(np.expand_dims(np.clip((arr - mean_val) * 0.8 + mean_val, 0, 255), 0), verbose=0)[0])
-    return np.mean(predictions, axis=0)
-
-
-# ============ التنبؤ النهائي (Ensemble) ============
-def predict_ensemble(img):
+# ============ التنبؤ مع TTA ============
+def predict_with_tta(img):
     arr = preprocess_ct_image(img)
-    pred_v2 = predict_single_model(model_v2, arr)
-    pred_v3 = predict_single_model(model_v3, arr)
-    # متوسط مرجّح
-    avg = WEIGHT_V2 * pred_v2 + WEIGHT_V3 * pred_v3
-    # تطبيع
+    preds = []
+    preds.append(model.predict(np.expand_dims(arr, 0), verbose=0)[0])
+    preds.append(model.predict(np.expand_dims(np.fliplr(arr).copy(), 0), verbose=0)[0])
+    preds.append(model.predict(np.expand_dims(np.flipud(arr).copy(), 0), verbose=0)[0])
+    for angle in [-12, 12]:
+        rot = rotate(arr, angle, reshape=False, mode='nearest', axes=(0, 1))
+        preds.append(model.predict(np.expand_dims(rot, 0), verbose=0)[0])
+    preds.append(model.predict(np.expand_dims(np.clip(arr * 1.15, 0, 255), 0), verbose=0)[0])
+    preds.append(model.predict(np.expand_dims(np.clip(arr * 0.85, 0, 255), 0), verbose=0)[0])
+    avg = np.mean(preds, axis=0)
     if avg.sum() > 0:
         avg = avg / avg.sum()
-    return {class_names[i]: float(avg[i]) for i in range(len(class_names))}
-
+    return avg
 
 # ============ الواجهة ============
-demo = gr.Interface(
-    fn=predict_ensemble,
-    inputs=gr.Image(type="pil", label="ارفع صورة CT للكلى"),
-    outputs=gr.Label(num_top_classes=4, label="التصنيف المتوقع"),
-    title="🩺 نظام تصنيف أمراض الكلى (Ensemble)",
-    description="""**النموذج**: Ensemble (EfficientNetB0 v2 + v3) + TTA + CLAHE
-**الدقة على Kaggle**: 94.42%
-**المعالجة**: CLAHE + Intensity Normalization + Ensemble""",
-    allow_flagging="never"
-)
+st.set_page_config(page_title="Kidney Disease Classifier", page_icon="🩺", layout="wide")
 
-print("🚀 جاري تشغيل الواجهة...")
-demo.launch(share=True, debug=False)
+st.title("🩺 نظام تصنيف أمراض الكلى")
+st.markdown("**النموذج**: EfficientNetB0 + TTA + CLAHE | **الدقة على بيانات Kaggle**: 94.42%")
+st.markdown("---")
+
+uploaded_file = st.file_uploader("📤 ارفعي صورة CT للكلى", type=['jpg', 'jpeg', 'png'])
+
+if uploaded_file is not None:
+    img = Image.open(uploaded_file)
+    col1, col2 = st.columns(2)
+   
+    with col1:
+        st.image(img, caption="الصورة المرفوعة", use_column_width=True)
+   
+    with col2:
+        with st.spinner("🔍 جاري التحليل..."):
+            preds = predict_with_tta(img)
+       
+        top_idx = int(np.argmax(preds))
+        confidence = preds[top_idx] * 100
+       
+        st.success(f"### 🎯 التصنيف: **{class_names[top_idx]}**")
+        st.metric("نسبة الثقة", f"{confidence:.2f}%")
+       
+        st.markdown("### 📊 الاحتمالات لكل فئة:")
+        df = pd.DataFrame({
+            'الفئة': class_names,
+            'الاحتمالية (%)': (preds * 100).round(2)
+        }).sort_values('الاحتمالية (%)', ascending=False)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.bar_chart(df.set_index('الفئة'))
+
+st.markdown("---")
+st.caption("⚠️ هذا النموذج لأغراض تعليمية فقط، وليس بديلاً عن التشخيص الطبي.")
