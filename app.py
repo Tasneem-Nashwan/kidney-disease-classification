@@ -90,3 +90,5 @@ if uploaded_file is not None:
 
 st.markdown("---")
 st.caption("⚠️ هذا النموذج لأغراض تعليمية فقط، وليس بديلاً عن التشخيص الطبي.")
+
+
