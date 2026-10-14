@@ -1,0 +1,48 @@
+# Data
+data/
+*.zip
+*.tar.gz
+
+# Models (too large)
+*.h5
+kidney_model_v2.keras
+kidney_model_v3.keras
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Gradio temp files
+app.py_files/
+app.py.html
+
+# MLflow
+mlruns/
+
+# Kaggle
+.kaggle/
+
+# Environment
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+untitled.txt
+untitled1.txt
+untitled2.txt
+
+*.keras
+*.h5
+Kidney_model*.keras
