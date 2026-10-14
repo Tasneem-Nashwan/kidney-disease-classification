@@ -17,7 +17,7 @@ def load_model():
     if not os.path.exists(MODEL_PATH):
         with st.spinner("⏳ جاري تحميل النموذج لأول مرة..."):
             try:
-                gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False, fuzzy=True)
+                gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False)
             except Exception as e:
                 st.error(f"❌ خطأ في تحميل النموذج: {e}")
                 st.stop()
