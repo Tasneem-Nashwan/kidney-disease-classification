@@ -101,7 +101,15 @@ A Deep Learning project for classifying kidney CT scans into 4 categories: **Nor
 
 ## 📁 Project Structure
 
-```
+## 🚀 Live Demo
+
+**جرب النموذج مباشرة من الرابط الدائم:**
+
+👉 **[https://kidney-classifier-tasneem-ai.streamlit.app](https://kidney-classifier-tasneem-ai.streamlit.app)**
+
+ارفع صورة CT للكلى، واحصل على التصنيف فوراً.
+
+---
 
 kidney-disease-classification/
 ├── app.py                          # Gradio web interface
