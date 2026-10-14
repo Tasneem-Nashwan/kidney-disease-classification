@@ -1,12 +1,8 @@
 streamlit
-tensorflow==2.16.2
-keras==3.12.4
+tensorflow-cpu==2.16.2
 numpy==1.26.4
 opencv-python-headless==4.9.0.80
 scipy
-Pillow==10.2.0
+Pillow
 gdown
-pandas==2.1.4
-scikit-learn==1.3.2
-matplotlib==3.8.2
-seaborn==0.13.0
+pandas
