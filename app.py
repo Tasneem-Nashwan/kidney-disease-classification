@@ -1,6 +1,4 @@
 import streamlit as st
-
-# ⚠️ يجب أن يكون أول أمر Streamlit
 st.set_page_config(page_title="Kidney Disease Classifier", page_icon="🩺", layout="wide")
 
 import tensorflow as tf
@@ -9,17 +7,36 @@ from PIL import Image
 from scipy.ndimage import rotate
 import cv2
 import os
-import gdown
+import requests
 import pandas as pd
 
 # ============ تحميل النموذج من Google Drive ============
 MODEL_PATH = "kidney_model_clean.keras"
 FILE_ID = "1_glpz6OnqWZt5QkRGLbhzZVmJNU9Yhv4"
 
+def download_from_gdrive(file_id, output):
+    """تحميل موثوق من Google Drive باستخدام requests"""
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    session = requests.Session()
+    response = session.get(url, stream=True)
+   
+    # معالجة صفحة التأكيد للملفات الكبيرة
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            url = f"https://drive.google.com/uc?export=download&confirm={value}&id={file_id}"
+            response = session.get(url, stream=True)
+            break
+   
+    with open(output, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=32768):
+            if chunk:
+                f.write(chunk)
+
 @st.cache_resource
 def load_model():
     if not os.path.exists(MODEL_PATH):
-        gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False)
+        with st.spinner("⏳ تحميل النموذج لأول مرة (~30 ثانية)..."):
+            download_from_gdrive(FILE_ID, MODEL_PATH)
     return tf.keras.models.load_model(MODEL_PATH, compile=False)
 
 model = load_model()
@@ -66,20 +83,15 @@ uploaded_file = st.file_uploader("📤 ارفعي صورة CT للكلى", type=
 if uploaded_file is not None:
     img = Image.open(uploaded_file)
     col1, col2 = st.columns(2)
-
     with col1:
         st.image(img, caption="الصورة المرفوعة", use_column_width=True)
-
     with col2:
         with st.spinner("🔍 جاري التحليل..."):
             preds = predict_with_tta(img)
-
         top_idx = int(np.argmax(preds))
         confidence = preds[top_idx] * 100
-
         st.success(f"### 🎯 التصنيف: **{class_names[top_idx]}**")
         st.metric("نسبة الثقة", f"{confidence:.2f}%")
-
         st.markdown("### 📊 الاحتمالات لكل فئة:")
         df = pd.DataFrame({
             'الفئة': class_names,
@@ -90,5 +102,3 @@ if uploaded_file is not None:
 
 st.markdown("---")
 st.caption("⚠️ هذا النموذج لأغراض تعليمية فقط، وليس بديلاً عن التشخيص الطبي.")
-
-
